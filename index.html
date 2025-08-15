@@ -1,0 +1,711 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>GeM-like Marketplace (Online)</title>
+
+<!-- Firebase SDKs (compat for simpler code) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+
+<style>
+  :root{--bg:#f7f9fc;--card:#fff;--ink:#1f2430;--muted:#6b7280;--accent:#6b5b95}
+  *{box-sizing:border-box;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial}
+  body{margin:0;background:var(--bg);color:var(--ink)}
+  header{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:12px 16px;background:#ffffffdd;backdrop-filter:saturate(180%) blur(8px);position:sticky;top:0;border-bottom:1px solid #eef2f7}
+  h1{font-size:18px;color:var(--accent);margin:0}
+  #who{font-size:12px;color:var(--muted)}
+  .wrap{max-width:1100px;margin:0 auto;padding:16px}
+  .grid{display:grid;gap:12px}
+  @media(min-width:960px){.grid{grid-template-columns:1fr 1fr}}
+  .card{background:var(--card);border-radius:14px;padding:14px;box-shadow:0 10px 24px rgba(0,0,0,.06)}
+  label{font-size:12px;color:var(--muted)}
+  input,select,button,textarea{width:100%;padding:10px 12px;margin-top:6px;border:1px solid #e5e7eb;border-radius:10px;background:#fff}
+  textarea{min-height:70px;resize:vertical}
+  button{cursor:pointer}
+  .primary{background:var(--accent);border:0;color:#fff}
+  .danger{background:#ef4444;border:0;color:#fff}
+  .ghost{background:#f3f4f6}
+  .row{display:flex;gap:8px;flex-wrap:wrap}
+  .row>*{flex:1}
+  .list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px}
+  .item{background:linear-gradient(180deg,#fff,#fbfdff);border:1px solid #eef2f7;border-radius:12px;padding:10px;display:flex;gap:10px;justify-content:space-between;align-items:center}
+  .muted{color:var(--muted);font-size:12px}
+  .hidden{display:none}
+  .pill{font-size:12px;background:#eef;border-radius:999px;padding:4px 8px}
+  .avatar{width:42px;height:42px;border-radius:50%;object-fit:cover;border:1px solid #e5e7eb}
+  .hr{height:1px;background:#eef2f7;margin:10px 0}
+  .tiny{font-size:11px;color:#64748b}
+  .tag{background:#e8f5e9;color:#137333;border-radius:8px;padding:4px 8px;font-size:12px}
+  .warn{background:#fff7ed;color:#b45309;border-radius:8px;padding:4px 8px;font-size:12px}
+  .right{display:flex;gap:8px;align-items:center}
+  .section-title{margin:8px 0 0 0;font-size:14px;color:#374151}
+</style>
+</head>
+<body>
+<header>
+  <div style="display:flex;gap:10px;align-items:center">
+    <img id="navAvatar" class="avatar" src="" alt="" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2242%22 height=%22442%22><rect width=%2242%22 height=%2242%22 fill=%22%23eee%22/><text x=%2250%25%22 y=%2255%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 font-size=%2212%22 fill=%22%23999%22>👤</text></svg>'">
+    <div>
+      <h1>GeM-like Marketplace</h1>
+      <div id="who" class="muted">Not signed in</div>
+    </div>
+  </div>
+  <div class="right">
+    <button id="btnGoLogin" class="ghost">Login</button>
+    <button id="btnGoRegister" class="primary">Register</button>
+    <button id="btnLogout" class="danger hidden">Logout</button>
+  </div>
+</header>
+
+<div class="wrap grid">
+  <!-- AUTH CARD -->
+  <section id="authCard" class="card">
+    <h3>Login</h3>
+    <div class="row">
+      <select id="loginRole">
+        <option value="buyer">Buyer</option>
+        <option value="vendor">Vendor</option>
+      </select>
+      <select id="loginMode">
+        <option value="email">Email + Password</option>
+        <option value="phone">Phone OTP (buyers)</option>
+      </select>
+    </div>
+    <div id="loginEmailBlock">
+      <label>Email</label><input id="loginEmail" type="email" placeholder="you@example.com">
+      <label>Password</label><input id="loginPass" type="password" placeholder="********">
+      <button id="btnLogin" class="primary">Login</button>
+      <button id="btnForgot" class="ghost">Forgot password</button>
+    </div>
+
+    <div id="loginPhoneBlock" class="hidden">
+      <label>Phone (India)</label><input id="loginPhone" placeholder="+91XXXXXXXXXX">
+      <div id="recaptcha" style="margin-top:8px"></div>
+      <button id="btnSendOtp" class="primary">Send OTP</button>
+      <div id="otpArea" class="hidden">
+        <label>Enter OTP</label><input id="otpCode" placeholder="123456">
+        <button id="btnVerifyOtp" class="primary">Verify & Login</button>
+      </div>
+    </div>
+    <div class="hr"></div>
+    <div class="tiny">Tip: Vendors typically use email/password. Buyers can use phone OTP.</div>
+  </section>
+
+  <!-- REGISTER CARD -->
+  <section id="registerCard" class="card">
+    <h3>Register</h3>
+    <div class="row">
+      <select id="regRole">
+        <option value="buyer">Buyer</option>
+        <option value="vendor">Vendor</option>
+      </select>
+      <input id="regEmail" type="email" placeholder="Email (for password reset/notifications)">
+    </div>
+    <div class="row">
+      <input id="regPhone" placeholder="+91XXXXXXXXXX">
+      <input id="regName" placeholder="Full name">
+    </div>
+    <div class="row">
+      <input id="regPass" type="password" placeholder="Password">
+      <input id="regAddress" placeholder="(Buyer) Delivery Address / (Vendor) Business Address">
+    </div>
+    <div class="row">
+      <input id="regUPI" placeholder="(Vendor) UPI ID e.g. name@bank">
+      <input id="regGST" placeholder="(Vendor) GSTIN (optional)">
+    </div>
+    <div class="row">
+      <input id="regPAN" placeholder="(Vendor) PAN Number">
+      <input id="regAadhaar" placeholder="(Vendor) Aadhaar Number">
+    </div>
+    <label>Profile Photo</label><input id="fileProfile" type="file" accept="image/*">
+    <div id="vendorDocs" class="row">
+      <div>
+        <label>Aadhaar Photo</label><input id="fileAadhaar" type="file" accept="image/*,application/pdf">
+      </div>
+      <div>
+        <label>PAN Photo</label><input id="filePAN" type="file" accept="image/*,application/pdf">
+      </div>
+      <div>
+        <label>GST Certificate (optional)</label><input id="fileGST" type="file" accept="image/*,application/pdf">
+      </div>
+    </div>
+    <div style="margin-top:8px" class="row">
+      <button id="btnRegister" class="primary">Create Account</button>
+      <button id="btnClearReg" class="ghost">Clear</button>
+    </div>
+    <div class="hr"></div>
+    <div class="tiny">All files are uploaded to secure cloud storage. You can edit profile later.</div>
+  </section>
+
+  <!-- HOME / DASHBOARD -->
+  <section id="homeCard" class="card hidden" style="grid-column:1/-1">
+    <div class="row" style="align-items:center">
+      <div class="row" style="align-items:center;gap:10px">
+        <img id="homeAvatar" class="avatar" src="">
+        <div>
+          <div id="homeName" style="font-weight:600"></div>
+          <div id="homeRole" class="muted"></div>
+        </div>
+      </div>
+      <div style="text-align:right">
+        <span id="homeUPI" class="pill hidden"></span>
+      </div>
+    </div>
+    <div class="hr"></div>
+
+    <!-- Buyer tools -->
+    <div id="buyerTools" class="hidden">
+      <h4 class="section-title">Create Demand (Multiple Items)</h4>
+      <div class="row">
+        <input id="dTitle" placeholder="Demand title (e.g., Office Chairs)">
+        <textarea id="dDesc" placeholder="Short description/specifications"></textarea>
+      </div>
+      <div id="itemsWrap"></div>
+      <div class="row">
+        <button id="btnAddItem" class="ghost">+ Add Item</button>
+        <button id="btnPublishDemand" class="primary">Publish Demand</button>
+      </div>
+      <div class="hr"></div>
+      <h4 class="section-title">Your Demands</h4>
+      <ul id="buyerDemands" class="list"></ul>
+    </div>
+
+    <!-- Vendor tools -->
+    <div id="vendorTools" class="hidden">
+      <h4 class="section-title">Open Demands</h4>
+      <ul id="openDemands" class="list"></ul>
+      <div class="hr"></div>
+      <h4 class="section-title">Your Supply Orders</h4>
+      <ul id="vendorOrders" class="list"></ul>
+    </div>
+  </section>
+</div>
+
+<script>
+/* ========= 1) Firebase Init ========= */
+const firebaseConfig = {
+  // TODO: paste your firebaseConfig here:
+  // apiKey: "YOUR_KEY",
+  // authDomain: "YOUR_PROJECT.firebaseapp.com",
+  // projectId: "YOUR_PROJECT",
+  // storageBucket: "YOUR_PROJECT.appspot.com",
+  // messagingSenderId: "XXXX",
+  // appId: "1:XXXX:web:XXXX"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+const storage = firebase.storage();
+
+/* ========= 2) UI Helpers ========= */
+const $ = id => document.getElementById(id);
+const fmtMoney = n => "₹" + Number(n||0).toLocaleString("en-IN");
+const nowTs = () => Date.now();
+const setHidden = (el,flag)=> el.classList[flag?'add':'remove']('hidden');
+
+function toast(msg){ alert(msg); }
+function newItemRow(idx){
+  const wrap = document.createElement('div');
+  wrap.className = 'row';
+  wrap.innerHTML = `
+    <input placeholder="Item ${idx+1} name" class="it-name">
+    <input placeholder="Qty" type="number" class="it-qty">
+    <input placeholder="Unit price (optional)" type="number" class="it-price">
+  `;
+  return wrap;
+}
+
+/* ========= 3) Auth UI switching ========= */
+function showLoggedOut(){
+  setHidden($('authCard'),false);
+  setHidden($('registerCard'),false);
+  setHidden($('homeCard'),true);
+  $('who').textContent = 'Not signed in';
+  setHidden($('btnLogout'),true);
+  setHidden($('btnGoLogin'),false);
+  setHidden($('btnGoRegister'),false);
+  $('navAvatar').src='';
+}
+function showLoggedIn(profile){
+  setHidden($('authCard'),true);
+  setHidden($('registerCard'),true);
+  setHidden($('homeCard'),false);
+  setHidden($('btnLogout'),false);
+  setHidden($('btnGoLogin'),true);
+  setHidden($('btnGoRegister'),true);
+  $('who').textContent = `${profile.name || profile.email || ''} — ${profile.role}`;
+  $('homeName').textContent = profile.name || '';
+  $('homeRole').textContent = `${profile.role.toUpperCase()} · ${profile.email||''} · ${profile.phone||''}`;
+  $('navAvatar').src = profile.photoURL || '';
+  $('homeAvatar').src = profile.photoURL || '';
+  if(profile.role==='vendor' && profile.upi) { $('homeUPI').textContent = 'UPI: '+profile.upi; setHidden($('homeUPI'),false); }
+  setHidden($('buyerTools'), !(profile.role==='buyer'));
+  setHidden($('vendorTools'), !(profile.role==='vendor'));
+  if(profile.role==='buyer'){ loadBuyerDemands(); }
+  if(profile.role==='vendor'){ loadOpenDemands(); loadVendorOrders(); }
+}
+
+/* ========= 4) Global state ========= */
+let currentUser = null; // Firebase user
+let currentProfile = null; // Firestore profile doc
+
+/* ========= 5) Auth: Email login / forgot ========= */
+$('btnLogin').onclick = async () => {
+  const email = $('loginEmail').value.trim();
+  const pass = $('loginPass').value;
+  try{
+    const cred = await auth.signInWithEmailAndPassword(email, pass);
+    await postLogin(cred.user);
+  }catch(e){ toast(e.message); }
+};
+$('btnForgot').onclick = async ()=>{
+  const email = $('loginEmail').value.trim();
+  if(!email) return toast('Enter your email first');
+  try{ await auth.sendPasswordResetEmail(email); toast('Password reset email sent'); }catch(e){ toast(e.message); }
+};
+
+/* ========= 6) Auth: Phone OTP (buyers) ========= */
+let recaptchaVerifier, confirmationResult;
+function buildRecaptcha(){
+  if(recaptchaVerifier) return;
+  recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha',{size:'invisible'});
+}
+$('btnSendOtp').onclick = async ()=>{
+  try{
+    buildRecaptcha();
+    const phone = $('loginPhone').value.trim();
+    if(!phone.startsWith('+')) return toast('Phone must include +91, e.g., +9198xxxxxxx');
+    confirmationResult = await auth.signInWithPhoneNumber(phone, recaptchaVerifier);
+    setHidden($('otpArea'), false);
+    toast('OTP sent');
+  }catch(e){ toast(e.message); }
+};
+$('btnVerifyOtp').onclick = async ()=>{
+  try{
+    const code = $('otpCode').value.trim();
+    const result = await confirmationResult.confirm(code);
+    await postLogin(result.user);
+  }catch(e){ toast('Invalid OTP: ' + e.message); }
+};
+
+/* ========= 7) Switch login mode ========= */
+$('loginMode').onchange = ()=>{
+  const mode = $('loginMode').value;
+  setHidden($('loginEmailBlock'), mode!=='email');
+  setHidden($('loginPhoneBlock'), mode!=='phone');
+};
+$('btnGoLogin').onclick = ()=> window.scrollTo({top:0,behavior:'smooth'});
+$('btnGoRegister').onclick = ()=> window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'});
+
+/* ========= 8) Registration ========= */
+$('regRole').onchange = ()=>{
+  const isVendor = $('regRole').value === 'vendor';
+  setHidden($('vendorDocs'), !isVendor);
+};
+$('btnClearReg').onclick = ()=>{
+  ['regEmail','regPhone','regName','regPass','regAddress','regUPI','regGST','regPAN','regAadhaar'].forEach(id=>{$(id).value='';});
+  ['fileProfile','fileAadhaar','filePAN','fileGST'].forEach(id=>{$(id).value='';});
+};
+$('btnRegister').onclick = async ()=>{
+  const role = $('regRole').value;
+  const email = $('regEmail').value.trim();
+  const pass  = $('regPass').value;
+  const phone = $('regPhone').value.trim();
+  const name  = $('regName').value.trim();
+  const address = $('regAddress').value.trim();
+  const upi = $('regUPI').value.trim();
+  const gst = $('regGST').value.trim();
+  const pan = $('regPAN').value.trim();
+  const aadhaar = $('regAadhaar').value.trim();
+  const fProfile = $('fileProfile').files[0];
+  const fAadhaar = $('fileAadhaar').files[0];
+  const fPAN = $('filePAN').files[0];
+  const fGST = $('fileGST').files[0];
+
+  if(!email || !pass || !name) return toast('Name, email, password are required');
+
+  try{
+    const cred = await auth.createUserWithEmailAndPassword(email, pass);
+    const uid = cred.user.uid;
+
+    // Upload files (if any)
+    const urls = {};
+    async function up(path, file){ if(!file) return null; const ref = storage.ref().child(path); await ref.put(file); return await ref.getDownloadURL(); }
+    urls.profile = await up(`users/${uid}/profile.jpg`, fProfile);
+    if(role==='vendor'){
+      urls.aadhaar = await up(`users/${uid}/aadhaar`, fAadhaar);
+      urls.pan = await up(`users/${uid}/pan`, fPAN);
+      urls.gst = await up(`users/${uid}/gst`, fGST);
+    }
+
+    // Save profile
+    await db.collection('users').doc(uid).set({
+      uid, role, email, phone, name, address, upi, gst, pan, aadhaar,
+      photoURL: urls.profile || '',
+      docs: { aadhaar: urls.aadhaar||'', pan: urls.pan||'', gst: urls.gst||'' },
+      createdAt: nowTs(),
+      rating: { score: 0, count: 0 }
+    });
+
+    toast('Account created. You can login now.');
+    window.scrollTo({top:0,behavior:'smooth'});
+  }catch(e){ toast(e.message); }
+};
+
+/* ========= 9) Post login: load profile, route ========= */
+auth.onAuthStateChanged(async (u)=>{
+  if(!u){ currentUser=null; currentProfile=null; showLoggedOut(); return; }
+  await postLogin(u);
+});
+async function postLogin(u){
+  currentUser = u;
+  const snap = await db.collection('users').doc(u.uid).get();
+  if(!snap.exists){
+    // create bare profile if OTP login (no email signup)
+    await db.collection('users').doc(u.uid).set({
+      uid:u.uid, role: 'buyer', email: u.email||'', phone: u.phoneNumber||'', name: u.displayName||'',
+      address:'', upi:'', gst:'', pan:'', aadhaar:'', photoURL: u.photoURL||'', docs:{}, createdAt: nowTs(), rating:{score:0,count:0}
+    });
+  }
+  currentProfile = (await db.collection('users').doc(u.uid).get()).data();
+  $('loginEmail').value=''; $('loginPass').value=''; $('loginPhone').value=''; $('otpCode').value='';
+  showLoggedIn(currentProfile);
+}
+
+/* ========= 10) Logout ========= */
+$('btnLogout').onclick = async ()=>{ await auth.signOut(); toast('Logged out'); };
+
+/* ========= 11) Buyer: demand with multiple items ========= */
+const itemsWrap = $('itemsWrap');
+function resetItems(){ itemsWrap.innerHTML=''; addItem(); addItem(); }
+function addItem(){ itemsWrap.appendChild(newItemRow(itemsWrap.children.length)); }
+$('btnAddItem').onclick = addItem;
+resetItems();
+
+$('btnPublishDemand').onclick = async ()=>{
+  if(!currentProfile || currentProfile.role!=='buyer') return toast('Login as buyer');
+  const title = $('dTitle').value.trim(); const desc = $('dDesc').value.trim();
+  if(!title) return toast('Enter title');
+  const items = Array.from(itemsWrap.querySelectorAll('.row')).map(row=>{
+    const [n,q,p] = row.querySelectorAll('input');
+    return { name:n.value.trim(), qty:Number(q.value||0), unitPrice:Number(p.value||0) };
+  }).filter(it=>it.name && it.qty>0);
+  if(items.length===0) return toast('Add at least one item');
+
+  await db.collection('demands').add({
+    buyerId: currentUser.uid,
+    title, desc, items,
+    status:'BIDDING', createdAt: nowTs(),
+    bids: 0, l1: null, supply: null
+  });
+  $('dTitle').value=''; $('dDesc').value=''; resetItems();
+  toast('Demand published');
+  loadBuyerDemands(); loadOpenDemands();
+};
+
+/* ========= 12) Listing & actions ========= */
+// Buyer lists
+async function loadBuyerDemands(){
+  const qs = await db.collection('demands').where('buyerId','==',currentUser.uid).orderBy('createdAt','desc').get();
+  const ul = $('buyerDemands'); ul.innerHTML='';
+  if(qs.empty) ul.innerHTML = '<li class="muted">No demands yet</li>';
+  qs.forEach(doc=>{
+    const d = doc.data(); d.id = doc.id;
+    const li = document.createElement('li'); li.className='item';
+    const l1txt = d.l1? `<span class="tag">L1: ${fmtMoney(d.l1.amount)} · ${d.l1.deliveryDays}d</span>` : `<span class="warn">No L1 yet</span>`;
+    li.innerHTML = `
+      <div>
+        <div><strong>${d.title}</strong></div>
+        <div class="muted">${d.desc||''}</div>
+        <div class="tiny">Items: ${d.items.length} · Bids: ${d.bids} · Status: ${d.status}</div>
+        <div style="margin-top:4px">${l1txt}</div>
+      </div>
+      <div class="right">
+        <button class="ghost" onclick="openDemand('${d.id}')">Open</button>
+      </div>`;
+    ul.appendChild(li);
+  });
+}
+// Vendor open demands
+async function loadOpenDemands(){
+  const qs = await db.collection('demands').where('status','==','BIDDING').orderBy('createdAt','desc').get();
+  const ul = $('openDemands'); ul.innerHTML='';
+  if(qs.empty) ul.innerHTML = '<li class="muted">No open demands</li>';
+  qs.forEach(doc=>{
+    const d = doc.data(); d.id = doc.id;
+    const li = document.createElement('li'); li.className='item';
+    li.innerHTML = `
+      <div>
+        <div><strong>${d.title}</strong></div>
+        <div class="tiny">${new Date(d.createdAt).toLocaleString()}</div>
+      </div>
+      <div class="right">
+        <button class="ghost" onclick="openDemand('${d.id}')">Open</button>
+      </div>`;
+    ul.appendChild(li);
+  });
+}
+// Vendor supply orders (awarded)
+async function loadVendorOrders(){
+  const qs = await db.collection('demands').where('status','in',['AWARDED','SUPPLY_ORDER','SHIPPED','DELIVERED','PAID']).get();
+  const ul = $('vendorOrders'); ul.innerHTML = '';
+  qs.forEach(doc=>{
+    const d = doc.data(); d.id = doc.id;
+    if(d.l1 && d.l1.vendorId === currentUser.uid){
+      const li = document.createElement('li'); li.className='item';
+      li.innerHTML = `
+        <div>
+          <div><strong>${d.title}</strong></div>
+          <div class="tiny">Status: ${d.status} · L1 ${fmtMoney(d.l1.amount)} / ${d.l1.deliveryDays}d</div>
+        </div>
+        <div class="right"><button class="ghost" onclick="openDemand('${d.id}')">Open</button></div>`;
+      ul.appendChild(li);
+    }
+  });
+}
+
+/* ========= 13) Demand drawer ========= */
+window.openDemand = async function(id){
+  const ref = db.collection('demands').doc(id);
+  const snap = await ref.get();
+  if(!snap.exists) return toast('Demand not found');
+  const d = snap.data(); d.id = snap.id;
+
+    const bidsSnap = await ref.collection('bids').orderBy('amount','asc').get();
+  const bids = bidsSnap.docs.map(x=>({id:x.id,...x.data()}));
+  const meIsBuyer = currentProfile.role==='buyer' && d.buyerId===currentUser.uid;
+  const meIsL1 = d.l1 && d.l1.vendorId===currentUser.uid;
+
+  const total = d.items.reduce((s,i)=>s + (i.qty * (i.unitPrice||0)),0);
+
+  const html = `
+  <div class="card" style="position:fixed;inset:10px;max-width:900px;margin:auto;z-index:30;overflow:auto">
+    <div class="row" style="justify-content:space-between;align-items:center">
+      <div><strong>${d.title}</strong><div class="tiny">${d.status} · Posted: ${new Date(d.createdAt).toLocaleString()}</div></div>
+      <button class="danger" onclick="this.closest('.card').remove()">Close</button>
+    </div>
+    <div class="hr"></div>
+    <div class="row">
+      <div class="card" style="flex:2">
+        <div class="muted">${d.desc||''}</div>
+        <div class="hr"></div>
+        <div><strong>Items</strong></div>
+        ${d.items.map(it=>`<div class="row"><div>${it.name}</div><div>Qty: ${it.qty}</div><div class="muted">Unit: ${it.unitPrice||'-'}</div></div>`).join('')}
+        <div class="hr"></div>
+        <div class="tiny">Estimated Sum: ${fmtMoney(total)}</div>
+      </div>
+      <div class="card" style="flex:1">
+        <div><strong>Bids</strong></div>
+        ${bids.length? bids.map(b=>`
+          <div class="item">
+            <div>
+              <div>${fmtMoney(b.amount)} / ${b.deliveryDays}d</div>
+              <div class="tiny">by ${b.vendorName||b.vendorId}</div>
+            </div>
+            <div>${d.l1 && d.l1.bidId===b.id ? '<span class="tag">L1</span>':''}</div>
+          </div>
+        `).join('') : '<div class="muted">No bids yet</div>'}
+      </div>
+    </div>
+
+    <div class="hr"></div>
+
+    ${ currentProfile.role==='vendor' && d.status==='BIDDING' ? `
+      <div class="card">
+        <div><strong>Place / Update Quote</strong></div>
+        <div class="row">
+          <input id="qAmount" type="number" placeholder="Amount (₹)">
+          <input id="qDays" type="number" placeholder="Delivery days">
+        </div>
+        <button class="primary" onclick="placeOrUpdateBid('${d.id}')">Submit Quote</button>
+      </div>` : ''}
+
+    ${ meIsBuyer ? `
+      <div class="card">
+        <div><strong>Buyer Actions</strong></div>
+        <div class="row">
+          <button class="ghost" onclick="recomputeL1('${d.id}')">Recompute L1</button>
+          <button class="primary" onclick="awardL1('${d.id}')">Award L1 & Create Supply Order</button>
+          <button class="danger" onclick="cancelDemand('${d.id}')">Cancel</button>
+        </div>
+        ${ d.status==='DELIVERED' ? `
+          <div class="row" style="margin-top:8px">
+            <input id="cracNote" placeholder="CRAC note / receipt no.">
+            <button class="primary" onclick="saveCRAC('${d.id}')">Save CRAC</button>
+            <button class="ghost" onclick="payUPI('${d.id}')">Pay via UPI</button>
+          </div>` : '' }
+      </div>` : ''}
+
+    ${ meIsL1 ? `
+      <div class="card">
+        <div><strong>Vendor Actions</strong></div>
+        <div class="row">
+          <button class="primary" onclick="confirmSupply('${d.id}')">Confirm Supply</button>
+          <button class="ghost" onclick="markShipped('${d.id}')">Mark Shipped</button>
+          <button class="ghost" onclick="markDelivered('${d.id}')">Mark Delivered</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <label>Upload Invoice (PDF/Image)</label>
+          <input id="fileInvoice" type="file" accept="application/pdf,image/*">
+          <button class="ghost" onclick="uploadInvoice('${d.id}')">Upload</button>
+        </div>
+      </div>` : ''}
+
+  </div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+/* ========= 14) Vendor: place/update bid (reverse auction) ========= */
+window.placeOrUpdateBid = async function(demandId){
+  const amount = Number(($('qAmount')||{}).value || 0);
+  const days = Number(($('qDays')||{}).value || 0);
+  if(!amount || !days) return toast('Enter amount & days');
+  if(currentProfile.role!=='vendor') return toast('Vendor only');
+
+  const ref = db.collection('demands').doc(demandId);
+  const bidRef = ref.collection('bids').doc(currentUser.uid);
+  const existing = await bidRef.get();
+  await bidRef.set({
+    bidId: currentUser.uid,
+    vendorId: currentUser.uid,
+    vendorName: currentProfile.name || currentProfile.email || '',
+    amount, deliveryDays: days, ts: nowTs()
+  });
+  // update bid counter
+  const d = (await ref.get()).data();
+  await ref.update({ bids: (d.bids||0) + (existing.exists?0:1) });
+  await recomputeL1(demandId, true);
+  toast('Quote saved');
+  document.querySelector('.card .danger')?.click(); // close drawer
+  loadOpenDemands(); loadVendorOrders();
+}
+
+/* ========= 15) Recompute L1 ========= */
+window.recomputeL1 = async function(demandId, silent=false){
+  const ref = db.collection('demands').doc(demandId);
+  const snaps = await ref.collection('bids').get();
+  if(snaps.empty){ await ref.update({l1:null}); if(!silent) toast('No bids'); return; }
+  const bids = snaps.docs.map(x=>x.data());
+  bids.sort((a,b)=> a.amount - b.amount || a.deliveryDays - b.deliveryDays || a.ts - b.ts);
+  const l1 = { bidId:bids[0].bidId, vendorId:bids[0].vendorId, amount:bids[0].amount, deliveryDays:bids[0].deliveryDays, ts:bids[0].ts };
+  await ref.update({ l1 });
+  if(!silent) toast('L1 selected: ' + fmtMoney(l1.amount) + ' / ' + l1.deliveryDays + 'd');
+  loadBuyerDemands(); loadOpenDemands(); loadVendorOrders();
+}
+
+/* ========= 16) Award L1 / cancel ========= */
+window.awardL1 = async function(demandId){
+  const ref = db.collection('demands').doc(demandId);
+  const d = (await ref.get()).data();
+  if(!d.l1) return toast('No L1 available');
+  await ref.update({ status:'AWARDED', supply:{status:'CREATED', createdAt: nowTs(), vendorId: d.l1.vendorId, amount: d.l1.amount, days: d.l1.deliveryDays } });
+  toast('Awarded & supply order created');
+  loadBuyerDemands(); loadVendorOrders();
+}
+window.cancelDemand = async function(demandId){
+  if(!confirm('Cancel this demand?')) return;
+  await db.collection('demands').doc(demandId).update({ status:'CANCELLED' });
+  toast('Cancelled');
+  loadBuyerDemands(); loadOpenDemands();
+}
+
+/* ========= 17) Vendor supply progress ========= */
+window.confirmSupply = async function(demandId){
+  await db.collection('demands').doc(demandId).update({ status:'SUPPLY_ORDER', 'supply.status':'VENDOR_CONFIRMED', 'supply.confirmedAt': nowTs() });
+  toast('Supply confirmed');
+  loadVendorOrders();
+}
+window.markShipped = async function(demandId){
+  await db.collection('demands').doc(demandId).update({ status:'SHIPPED', 'supply.status':'SHIPPED', 'supply.shippedAt': nowTs() });
+  toast('Marked shipped');
+  loadVendorOrders();
+}
+window.markDelivered = async function(demandId){
+  await db.collection('demands').doc(demandId).update({ status:'DELIVERED', 'supply.status':'DELIVERED', 'supply.deliveredAt': nowTs() });
+  toast('Marked delivered');
+  loadVendorOrders(); loadBuyerDemands();
+}
+
+/* ========= 18) Upload invoice (vendor) & CRAC (buyer) ========= */
+window.uploadInvoice = async function(demandId){
+  const file = document.getElementById('fileInvoice').files[0];
+  if(!file) return toast('Choose a file');
+  const ref = storage.ref().child(`invoices/${demandId}/${currentUser.uid}-${file.name}`);
+  await ref.put(file);
+  const url = await ref.getDownloadURL();
+  await db.collection('demands').doc(demandId).collection('docs').add({
+    type:'INVOICE_VENDOR', url, by: currentUser.uid, ts: nowTs()
+  });
+  toast('Invoice uploaded');
+}
+window.saveCRAC = async function(demandId){
+  const note = (document.getElementById('cracNote')||{}).value || '';
+  await db.collection('demands').doc(demandId).collection('docs').add({
+    type:'CRAC_BUYER', note, by: currentUser.uid, ts: nowTs()
+  });
+  toast('CRAC saved');
+}
+
+/* ========= 19) UPI Payment (Direct Intent) ========= */
+window.payUPI = async function(demandId){
+  // Needs vendor UPI ID from profile of L1 vendor
+  const dref = db.collection('demands').doc(demandId);
+  const d = (await dref.get()).data();
+  if(!d.l1) return toast('No L1');
+  const vProf = (await db.collection('users').doc(d.l1.vendorId).get()).data();
+  if(!vProf || !vProf.upi) return toast('Vendor has no UPI ID');
+  const amount = d.l1.amount; // you can allow buyer to edit if needed
+  const tn = encodeURIComponent(`Order ${demandId}`);
+  const url = `upi://pay?pa=${encodeURIComponent(vProf.upi)}&pn=${encodeURIComponent(vProf.name||'Vendor')}&am=${encodeURIComponent(amount)}&tn=${tn}&cu=INR`;
+  // Open UPI app
+  window.location.href = url;
+  // After returning, buyer can mark paid via CRAC/note or you can add a manual "Mark Paid" here and set status
+  await dref.update({ status: 'PAID' }); // optimistic; in production confirm manually
+  toast('Redirecting to UPI...');
+}
+
+/* ========= 20) Initial UI state ========= */
+showLoggedOut();
+
+/* ========= 21) Small toggles ========= */
+$('loginRole').onchange = ()=>{}; // reserved for role-specific tweaks
+</script>
+
+<!-- ======== README (Short) ========
+1) Create Firebase project → enable Authentication (Email/Password + Phone), Firestore, Storage.
+2) In Authentication → Sign-in method → add “Phone” and “Email/Password”.
+3) In Authentication → Settings → Authorized domains → add your site domain (e.g., yoursite.netlify.app).
+4) Copy your project’s firebaseConfig and paste above.
+5) Firestore rules (starter – tighten later):
+   rules_version = '2';
+   service cloud.firestore { match /databases/{database}/documents {
+     match /users/{uid} {
+       allow read: if request.auth != null;
+       allow create: if request.auth != null;
+       allow update, delete: if request.auth != null && request.auth.uid == uid;
+     }
+     match /demands/{id} {
+       allow read: if true;
+       allow create: if request.auth != null;
+       allow update, delete: if request.auth != null;
+     }
+     match /demands/{id}/bids/{bid} { allow read, write: if request.auth != null; }
+     match /demands/{id}/docs/{doc} { allow read, write: if request.auth != null; }
+   } }
+6) Storage rules (starter – tighten later):
+   rules_version = '2';
+   service firebase.storage { match /b/{bucket}/o {
+     match /{allPaths=**} { allow read, write: if request.auth != null; }
+   } }
+7) Host anywhere (Firebase Hosting, Netlify, Vercel). Open the site and test:
+   - Register vendor (upload docs, set UPI ID).
+   - Register buyer.
+   - Buyer publishes demand → Vendor quotes → Buyer recomputes L1 → Award → Vendor delivers → Buyer CRAC → Pay via UPI link.
+8) Forgot password: on Login tab, enter email → “Forgot password”.
+===================================== -->
+</body>
+</html>
